@@ -14,16 +14,18 @@ class DQN(nn.Module):
         if self.enable_dueling_dqn:
             # Value stream
             self.fc1_value = nn.Linear(hidden_dim, 256)
-            self.fc2_value = nn.Linear(256, 256)
+            # self.fc2_value = nn.Linear(256, 256)
             self.value = nn.Linear(256, 1)
 
             # Advantages stream
             self.fc1_advantages = nn.Linear(hidden_dim, 256)
-            self.fc2_advantages = nn.Linear(256, 256)
+            # self.fc2_advantages = nn.Linear(256, 256)
             self.advantages = nn.Linear(256, action_dim)
 
         else:
-            self.output = nn.Linear(hidden_dim, action_dim)
+            # self.output = nn.Linear(hidden_dim, action_dim)
+            self.input = nn.Linear(hidden_dim, 256)
+            self.output = nn.Linear(256, action_dim)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -31,19 +33,20 @@ class DQN(nn.Module):
         if self.enable_dueling_dqn:
             # Value calc
             v = F.relu(self.fc1_value(x))
-            v = F.relu(self.fc2_value(v))
+            # v = F.relu(self.fc2_value(v))
             V = self.value(v)
 
             # Advantages calc
             a = F.relu(self.fc1_advantages(x))
-            a = F.relu(self.fc2_advantages(a))
+            # a = F.relu(self.fc2_advantages(a))
             A = self.advantages(a)
 
             # Calc Q
             Q = V + A - torch.mean(A, dim=1, keepdim=True)
 
         else:
-            Q = self.output(x)
+            # Q = self.output(x)
+            Q = F.relu(self.output(F.relu(self.input(x))))
 
         return Q
 
