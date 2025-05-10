@@ -1,5 +1,6 @@
 import gymnasium as gym
 import numpy as np
+import cv2
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -31,6 +32,12 @@ matplotlib.use('Agg')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 device = 'cpu' # force cpu, sometimes GPU not always faster than CPU due to overhead of moving data to GPU
+
+def create_video(source, fps=60, output_name='output'):
+    out = cv2.VideoWriter(output_name + '.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (source[0].shape[1], source[0].shape[0]))
+    for i in range(len(source)):
+        out.write(source[i])
+    out.release()
 
 # Deep Q-Learning Agent
 class Agent():
@@ -68,7 +75,7 @@ class Agent():
         self.MODEL_FILE = os.path.join(RUNS_DIR, f'{self.hyperparameter_set}.pt')
         self.GRAPH_FILE = os.path.join(RUNS_DIR, f'{self.hyperparameter_set}.png')
 
-    def run(self, is_training=True, render=False):
+    def run(self, is_training=True, render=False, save=False, save_episode=10000):
         if is_training:
             start_time = datetime.now()
             last_graph_update_time = start_time
@@ -80,11 +87,13 @@ class Agent():
 
         # Create instance of the environment.
         # Use "**self.env_make_params" to pass in environment-specific parameters from hyperparameters.yml.
-        env = gym.make(self.env_id, render_mode='human' if render else None, **self.env_make_params)
+        if not save:
+            env = gym.make(self.env_id, render_mode='human' if render else None, **self.env_make_params)
+        else:
+            env = gym.make(self.env_id, render_mode='rgb_array' if render else None, **self.env_make_params)
 
         # Number of possible actions
         num_actions = env.action_space.n
-        print(env.observation_space.shape)
         # Get observation space size
         num_states = env.observation_space.shape[0] # Expecting type: Box(low, high, (shape0,), float64)
 
@@ -126,12 +135,15 @@ class Agent():
 
         # Train INDEFINITELY, manually stop the run when you are satisfied (or unsatisfied) with the results
         for episode in itertools.count():
-
+            # print(f"episode : {episode}")
             state, _ = env.reset()  # Initialize environment. Reset returns (state,info).
             state = torch.tensor(state, dtype=torch.float, device=device) # Convert state to tensor directly on device
 
             terminated = False      # True when agent reaches goal or fails
             episode_reward = 0.0    # Used to accumulate rewards per episode
+
+            if save and (episode % save_episode == 0):
+                frames = []
 
             # Perform actions until episode terminates or reaches max rewards
             # (on some envs, it is possible for the agent to train to a point where it NEVER terminates, so stop on reward is necessary)
@@ -169,9 +181,16 @@ class Agent():
 
                 # Move to the next state
                 state = new_state
-
+                if save and (episode % save_episode == 0):
+                    frames.append(env.render()[..., ::-1])
             # Keep track of the rewards collected per episode.
             rewards_per_episode.append(episode_reward)
+
+
+            if save and (episode % save_episode == 0):
+                str_episode = "{:08d}".format(episode)
+                print(f"Save video/{str_episode}.mp4")
+                create_video(frames, 30, f'video/{str_episode}')
 
             # Save model when new best reward is obtained.
             if is_training:
@@ -294,3 +313,4 @@ if __name__ == '__main__':
         dql.run(is_training=True)
     else:
         dql.run(is_training=False, render=True)
+        # dql.run(is_training=False, render=True, save=True, save_episode=1000)
